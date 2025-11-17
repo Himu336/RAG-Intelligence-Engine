@@ -1,0 +1,22 @@
+# Environment files (sensitive API keys, credentials)
+.env
+*.env
+
+# RAG-specific artifacts (vector stores, processed documents)
+# Modify these paths based on your project's specific directory structure
+vector_store/
+chroma_db/
+index_data/
+documents/
+source_docs/
+processed_data/
+
+# Log files
+*.log
+
+# Database files (if using local development DBs)
+*.sqlite
+*.sqlite3
+db.
+
+venv/

@@ -1,0 +1,22 @@
+# FastAPI framework
+fastapi==0.110.0
+
+# ASGI server
+uvicorn[standard]==0.29.0
+
+# Google Gemini API
+google-generativeai==0.5.2
+
+# Vector Database (Qdrant client)
+qdrant-client==1.9.1
+
+# Pydantic (FastAPI models)
+pydantic==2.6.4
+pydantic-settings==2.2.1
+
+# Utilities
+requests==2.31.0
+
+# Optional (logging, JSON handling)
+python-dotenv==1.0.1
+
