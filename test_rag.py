@@ -4,7 +4,7 @@ import json
 URL = "http://127.0.0.1:8000/rag"
 
 payload = {
-    "message": "i am very much interested in doing system design also",
+    "message": "death stranding",
     "user_id": "test_user_terminal"
 }
 
