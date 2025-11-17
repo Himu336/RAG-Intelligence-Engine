@@ -1,51 +1,55 @@
-from embeddings.generator import EmbeddingGenerator
+# vector_db/search_engine.py
+
 from vector_db.orm import VectorORM
+from embeddings.generator import EmbeddingGenerator
+
 
 class VectorSearchEngine:
+    """
+    Combines predefined context + long-term memory (user_history)
+    and returns the most relevant chunks for the RAG prompt.
+    """
+
     def __init__(self):
         self.db = VectorORM()
-        self.embedder = EmbeddingGenerator()
+        self.embed = EmbeddingGenerator()
 
-    def search_user_history(self, user_id: str, embedding, top_k=4):
-        col = self.db.client.get_collection(self.db.user_history)
-        
-        results = col.query(
-            query_embeddings=[embedding],
-            n_results=top_k,
-            where={"user_id": user_id}  # Filter by user
-        )
+    def search_relevant_chunks(self, query: str, user_id: str):
+        if not query or len(query.strip()) < 2:
+            return []
 
-        return results
+        # Create embedding for query
+        emb = self.embed.create_embedding(query)
 
-    def search_relevant_chunks(self, query: str, user_id: str, top_k=4):
-        # Embed the query
-        embedding = self.embedder.create_embedding(query)
+        # 1) Predefined context search (global knowledge about coach behavior)
+        try:
+            predefined = self.db.search(
+                collection=self.db.predefined,
+                embedding=emb,
+                limit=5
+            )
+        except Exception:
+            predefined = []
 
-        # Predefined content search
-        predefined = self.db.search(self.db.predefined, embedding, top_k)
+        # 2) User-specific memory
+        try:
+            user_mem = self.db.search(
+                collection=self.db.user_history,
+                embedding=emb,
+                limit=5,
+                user_id=user_id
+            )
+        except Exception:
+            user_mem = []
 
-        # User-specific search
-        user_history = self.search_user_history(user_id, embedding, top_k)
+        # Merge lists
+        merged = (predefined or []) + (user_mem or [])
 
-        merged = []
+        # Add final_score for consistent sorting
+        for m in merged:
+            m["final_score"] = float(m.get("score", 0.0))
 
-        # Format predefined
-        if "documents" in predefined and predefined["documents"]:
-            for idx in range(len(predefined["documents"][0])):
-                merged.append({
-                    "text": predefined["documents"][0][idx],
-                    "score": predefined["distances"][0][idx]
-                })
+        # Sort descending relevance
+        merged.sort(key=lambda x: x["final_score"], reverse=True)
 
-        # Format user history
-        if "documents" in user_history and user_history["documents"]:
-            for idx in range(len(user_history["documents"][0])):
-                merged.append({
-                    "text": user_history["documents"][0][idx],
-                    "score": user_history["distances"][0][idx]
-                })
-
-        # Lower cosine score = better match
-        merged_sorted = sorted(merged, key=lambda x: x["score"])
-
-        return merged_sorted[:top_k]
+        return merged

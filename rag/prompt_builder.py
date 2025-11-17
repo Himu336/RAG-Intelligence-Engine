@@ -2,57 +2,80 @@
 
 class PromptBuilder:
     @staticmethod
-    def build_prompt(user_query: str, context_chunks: list):
+    def build_prompt(user_query: str, context_chunks: list, recent_conversation: list):
+        """
+        Compose a compact prompt:
+          - persona rules
+          - top long-term memories (no scores)
+          - recent conversation (oldest->newest) BUT don't duplicate the latest user message
+          - the user's new message
+          - response rules
+        """
 
-        if not context_chunks:
-            context_text = "No relevant context found."
+        # Long-term memory: keep up to 4 concise snippets and filter trivial ones
+        filtered_chunks = []
+        for c in (context_chunks or [])[:8]:
+            text = (c.get("text") or "").strip()
+            src = (c.get("source") or "memory").upper()
+            # skip trivial very short items
+            if len(text) < 10:
+                continue
+            # skip identity facts like "is named X"
+            low = text.lower()
+            if low.startswith("is named") or low.startswith("named "):
+                continue
+            filtered_chunks.append((src, text))
+
+        if not filtered_chunks:
+            context_text = "No long-term memories available."
         else:
-            context_text = "\n\n".join(
-                [f"Chunk {i+1}: {c['text']}" for i, c in enumerate(context_chunks)]
-            )
+            # include at most 4
+            lines = []
+            for src, txt in filtered_chunks[:4]:
+                snippet = txt if len(txt) < 450 else txt[:450] + "..."
+                lines.append(f"[{src}] {snippet}")
+            context_text = "\n".join(lines)
 
-        prompt = f"""
-You are **Orena Assistant**, a polite, professional, and helpful course advisor for Orena — a company that sells career-focused technology courses.
+        # Recent conversation: oldest -> newest, but don't duplicate last user message
+        recent_lines = []
+        if recent_conversation:
+            recent_filtered = list(recent_conversation)
+            # drop the very last recent turn if it's the same user message (dedupe)
+            if recent_filtered:
+                last = recent_filtered[-1]
+                if last.get("role") == "user" and last.get("text", "").strip() == (user_query or "").strip():
+                    recent_filtered = recent_filtered[:-1]
 
-### 🎭 Your Personality & Behavior:
-- Friendly, supportive, and respectful.
-- Helpful like a real human advisor.
-- Encouraging but NEVER pushy.
-- Confident but not arrogant.
-- Professional but conversational.
-- Keep answers short, clean and WhatsApp-friendly.
+            for turn in recent_filtered:
+                role = turn.get("role", "user")
+                prefix = "User:" if role == "user" else "Assistant:"
+                text = (turn.get("text") or "").strip()
+                if not text:
+                    continue
+                # avoid repeating trivial lines
+                if len(text) < 6:
+                    continue
+                recent_lines.append(f"{prefix} {text}")
 
-### 🧠 Your Thinking Ability (Controlled Freedom):
-You MAY:
-- Improve the clarity and quality of the answer.
-- Reword or reorganize information for better understanding.
-- Add motivational guidance, career suggestions, or learning tips.
-- Suggest relevant courses based on user’s goals.
-- Summarize or make content easier to read.
+        recent_text = "\n".join(recent_lines) if recent_lines else "No recent conversation."
 
-You MUST NOT:
-- Invent fake facts, prices, features, or policies.
-- Provide information not supported by the context.
-- Over-promise unrealistic outcomes.
+        prompt = f"""You are a friendly personal coach. Help the user with planning, learning, productivity, career growth, and practical next steps.
+Use the long-term memories and recent conversation below to personalize answers, but do not invent facts.
 
-If something is unknown, say:
-“I am not aware of that, please check the available options.”
-
-### 📘 CONTEXT (Use this information only):
+Long-term memory (relevant):
 {context_text}
 
-### 💬 USER QUESTION:
-"{user_query}"
+Recent conversation:
+{recent_text}
 
-### 📏 RESPONSE RULES:
-1. Start politely and address the user directly.
-2. Use ONLY provided context for factual details.
-3. You may add mild creativity for tone, flow, clarity, and guidance.
-4. Keep it short (5–7 lines).
-5. Politely redirect if the user goes off-topic.
-6. Highlight benefits/value of relevant courses when appropriate.
-7. End with a helpful follow-up or offer (e.g., “Would you like recommendations?”).
+User's new message:
+{user_query}
 
-Now generate the best possible reply.
-"""
+Response rules:
+- Keep replies short (4-7 short lines).
+- Be practical, specific, and supportive.
+- Give 1-3 actionable steps and 1 short follow-up question.
+- Avoid medical, legal, or therapy-style advice.
+
+Now reply as the user's personal coach in a short, helpful style."""
         return prompt.strip()

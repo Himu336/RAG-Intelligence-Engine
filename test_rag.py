@@ -4,7 +4,7 @@ import json
 URL = "http://127.0.0.1:8000/rag"
 
 payload = {
-    "message": "tell me about all the courses you are offering",
+    "message": "i am very much interested in doing system design also",
     "user_id": "test_user_terminal"
 }
 
