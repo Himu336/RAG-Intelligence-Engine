@@ -1,9 +1,14 @@
 # app/schemas.py
-from pydantic import BaseModel
+
+from pydantic import BaseModel, Field
+
 
 class RAGRequest(BaseModel):
-    message: str
-    user_id: str
+    """Incoming request for the Personal Coach (RAG) endpoint."""
+    message: str = Field(..., description="User message")
+    user_id: str = Field(..., description="Unique user identifier")
+
 
 class RAGResponse(BaseModel):
-    ai_text: str
+    """Response returned by the Personal Coach."""
+    ai_text: str = Field(..., description="Generated AI response")
