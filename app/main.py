@@ -3,6 +3,7 @@
 from fastapi import FastAPI, HTTPException
 from app.schemas import RAGRequest, RAGResponse
 from app.router import router as app_router
+from app.text_interview.router import router as interview_router
 
 from app.vector_db.search_engine import VectorSearchEngine
 from app.rag.prompt_builder import PromptBuilder
@@ -23,6 +24,9 @@ app = FastAPI(
 
 # Mount global/base router
 app.include_router(app_router)
+
+# Mount interview router
+app.include_router(interview_router)
 
 # ----------------------------------------------------
 # SERVICE INITIALIZATION

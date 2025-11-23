@@ -50,6 +50,21 @@ class GeminiClient:
                     }
                 )
 
+                # Check for blocked/empty responses
+                if resp.candidates:
+                    candidate = resp.candidates[0]
+                    finish_reason = getattr(candidate, 'finish_reason', None)
+                    safety_ratings = getattr(candidate, 'safety_ratings', [])
+                    
+                    if finish_reason == 2:  # SAFETY or other blocking
+                        print(f"⚠️ Response blocked - finish_reason: {finish_reason}")
+                        if safety_ratings:
+                            print(f"⚠️ Safety ratings: {safety_ratings}")
+                    
+                    parts = getattr(candidate.content, "parts", [])
+                    if not parts:
+                        print(f"⚠️ Empty response - finish_reason: {finish_reason}, safety: {safety_ratings}")
+
                 print("🔍 RAW GEMINI RESPONSE:", resp)
                 return resp
 
