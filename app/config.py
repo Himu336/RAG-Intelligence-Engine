@@ -7,8 +7,14 @@ from pydantic import Field
 class Settings(BaseSettings):
     """Centralized application configuration loaded from environment variables."""
 
-    # --- Gemini / LLM ---
-    GEMINI_API_KEY: str = Field(..., description="Google Gemini API Key")
+    # --- Groq / LLM (OpenAI-compatible API) ---
+    GROQ_API_KEY: str = Field(..., description="Groq API Key for text, STT, and TTS via OpenAI-compatible API")
+
+    # --- Gemini for Embeddings ---
+    GEMINI_API_KEY: str | None = Field(
+        default=None,
+        description="Google Gemini API Key (used only for embeddings)",
+    )
 
     # --- SQL DB (Supabase / Neon / Postgres etc.) ---
     DATABASE_URL: str = Field(..., description="SQLAlchemy-compatible database URL")

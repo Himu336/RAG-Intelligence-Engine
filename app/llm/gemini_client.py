@@ -1,110 +1,96 @@
 # app/llm/gemini_client.py
 
-import time
 import json
-import google.generativeai as genai
-from google.api_core.exceptions import ServiceUnavailable
+from typing import Any
 
+from openai import OpenAI
 from app.config import settings
-
-
-# Configure API key once
-genai.configure(api_key=settings.GEMINI_API_KEY)
 
 
 class GeminiClient:
     """
-    Lightweight + stable Gemini wrapper.
+    Backwards-compatible LLM wrapper that now uses OpenAI instead of Gemini.
 
     Exposes:
       - generate_raw(prompt)
       - extract_text(response)
       - summarize_to_facts(text)
+
+    NOTE: We keep the class name `GeminiClient` so the rest of the codebase
+    does not need to change imports, but under the hood this uses OpenAI.
     """
 
-    MODEL_NAME = "models/gemini-2.5-flash"
+    # Groq LLaMA model for fast, high-quality chat
+    MODEL_NAME = "llama-3.1-8b-instant"
 
     def __init__(self):
-        print(f"🧠 Using Gemini Model: {self.MODEL_NAME}")
-        self.model = genai.GenerativeModel(self.MODEL_NAME)
+        print(f"🧠 Using Groq Model (GeminiClient shim): {self.MODEL_NAME}")
+        # Use OpenAI client pointed at Groq's OpenAI-compatible endpoint
+        self.client = OpenAI(
+            base_url="https://api.groq.com/openai/v1",
+            api_key=settings.GROQ_API_KEY,
+        )
 
     # ------------------------------------------------------------
-    # RAW GENERATION (with retries)
+    # RAW GENERATION
     # ------------------------------------------------------------
-    def generate_raw(self, prompt: str, max_output_tokens: int = 1024):
-        last_exc = None
+    def generate_raw(self, prompt: str, max_output_tokens: int = 1024) -> Any:
+        """
+        Generate a raw OpenAI chat completion response.
 
-        for attempt in range(3):
-            try:
-                print("\n================ LLM PROMPT ================")
-                print(prompt)
-                print("============================================\n")
+        We keep the same signature and logging style as the old Gemini client.
+        """
+        try:
+            print("\n================ LLM PROMPT ================")
+            print(prompt)
+            print("============================================\n")
 
-                print(f"🧠 Gemini call attempt {attempt + 1}")
+            print("🧠 OpenAI chat.completions call")
 
-                resp = self.model.generate_content(
-                    prompt,
-                    generation_config={
-                        "temperature": 0.6,
-                        "max_output_tokens": max_output_tokens,
-                    }
-                )
+            resp = self.client.chat.completions.create(
+                model=self.MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.6,
+                max_tokens=max_output_tokens,
+            )
 
-                # Check for blocked/empty responses
-                if resp.candidates:
-                    candidate = resp.candidates[0]
-                    finish_reason = getattr(candidate, 'finish_reason', None)
-                    safety_ratings = getattr(candidate, 'safety_ratings', [])
-                    
-                    if finish_reason == 2:  # SAFETY or other blocking
-                        print(f"⚠️ Response blocked - finish_reason: {finish_reason}")
-                        if safety_ratings:
-                            print(f"⚠️ Safety ratings: {safety_ratings}")
-                    
-                    parts = getattr(candidate.content, "parts", [])
-                    if not parts:
-                        print(f"⚠️ Empty response - finish_reason: {finish_reason}, safety: {safety_ratings}")
+            print("🔍 RAW OPENAI RESPONSE:", resp)
+            return resp
 
-                print("🔍 RAW GEMINI RESPONSE:", resp)
-                return resp
-
-            except Exception as e:
-                last_exc = e
-                msg = str(e).lower()
-
-                # Retry only if model overloaded
-                if "overloaded" in msg or "503" in msg or isinstance(e, ServiceUnavailable):
-                    wait = (attempt + 1) * 2
-                    print(f"⚠️ Model overloaded. Retrying in {wait}s...")
-                    time.sleep(wait)
-                    continue
-
-                print("❌ Non-retryable LLM error:", e)
-                break
-
-        raise Exception(f"[LLM ERROR] All attempts failed — last error: {last_exc}")
+        except Exception as e:
+            print("❌ LLM error:", e)
+            raise
 
     # ------------------------------------------------------------
     # SAFE TEXT EXTRACTION
     # ------------------------------------------------------------
-    def extract_text(self, resp):
-        """Safely extract plain text from Gemini generate_content response."""
+    def extract_text(self, resp: Any) -> str:
+        """
+        Safely extract plain text from an OpenAI chat.completions response.
+
+        This replaces the old Gemini-specific extraction logic.
+        """
         try:
-            candidate = resp.candidates[0]
-            parts = getattr(candidate.content, "parts", [])
+            # OpenAI chat completion response shape
+            if hasattr(resp, "choices") and resp.choices:
+                message = resp.choices[0].message
+                content = getattr(message, "content", "") or ""
+                return str(content).strip()
 
-            if not parts:
-                return ""
-
-            text = "".join(
-                part.text for part in parts
-                if hasattr(part, "text") and part.text
-            ).strip()
-
-            return text
+            # Fallback: try to treat resp as dict-like
+            if isinstance(resp, dict):
+                choices = resp.get("choices") or []
+                if choices:
+                    message = choices[0].get("message", {})
+                    return str(message.get("content", "")).strip()
 
         except Exception:
-            return ""
+            pass
+
+        return ""
 
     # ------------------------------------------------------------
     # SUMMARIZE TO SHORT FACTS (for long-term memory)

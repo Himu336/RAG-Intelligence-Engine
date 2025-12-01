@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException
 from app.schemas import RAGRequest, RAGResponse
 from app.router import router as app_router
 from app.text_interview.router import router as interview_router
+from app.voice_interview.router import router as voice_interview_router
 
 from app.vector_db.search_engine import VectorSearchEngine
 from app.rag.prompt_builder import PromptBuilder
@@ -27,6 +28,9 @@ app.include_router(app_router)
 
 # Mount interview router
 app.include_router(interview_router)
+
+# Mount voice interview router
+app.include_router(voice_interview_router)
 
 # ----------------------------------------------------
 # SERVICE INITIALIZATION
@@ -85,7 +89,7 @@ def run_rag(request: RAGRequest):
         recent_conversation=recent_turns
     )
 
-    # 5) Call Gemini LLM
+    # 5) Call LLM (Groq via GeminiClient shim)
     try:
         resp = llm_client.generate_raw(prompt)
     except Exception as e:
@@ -93,24 +97,13 @@ def run_rag(request: RAGRequest):
         chat_memory.add_assistant(user_id, ai_text)
         return RAGResponse(ai_text=ai_text)
 
-    # 6) Extract text
-    try:
-        candidate = resp.candidates[0]
-    except Exception:
-        ai_text = "[ERROR] No candidates returned."
+    # 6) Extract text (model-agnostic via GeminiClient shim)
+    ai_text = llm_client.extract_text(resp)
+
+    if not ai_text:
+        ai_text = "[ERROR] No candidates returned or empty response."
         chat_memory.add_assistant(user_id, ai_text)
         return RAGResponse(ai_text=ai_text)
-
-    if not candidate.content or not getattr(candidate.content, "parts", []):
-        safety = getattr(candidate, "safety_ratings", None)
-        ai_text = f"[BLOCKED OR EMPTY RESPONSE] Safety: {safety}"
-        chat_memory.add_assistant(user_id, ai_text)
-        return RAGResponse(ai_text=ai_text)
-
-    parts = candidate.content.parts or []
-    ai_text = "".join(
-        p.text for p in parts if hasattr(p, "text") and p.text
-    ).strip() or "[LLM ERROR] empty text"
 
     # 7) Save assistant reply to short-term memory
     chat_memory.add_assistant(user_id, ai_text)

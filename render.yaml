@@ -8,6 +8,8 @@ services:
     envVars:
       - key: GEMINI_API_KEY
         sync: false
+      - key: DATABASE_URL
+        sync: false
       - key: REDIS_HOST
         sync: false
       - key: REDIS_PORT
@@ -18,3 +20,4 @@ services:
         sync: false
       - key: QDRANT_API_KEY
         sync: false
+      # ELEVEN_LABS_API_KEY is now optional (not needed with local open-source STT/TTS)
